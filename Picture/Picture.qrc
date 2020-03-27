@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>background.jpg</file>
+        <file>Picture.qrc</file>
+        <file>qq.ico</file>
+    </qresource>
+</RCC>
