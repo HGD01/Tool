@@ -14,18 +14,24 @@
 
 #include <QFile>
 #include <QDir>
+#include <QTime>
+#include "extend.h"
+
 QString filepath;
 
 QSerialPort * serial;
 
 QString Debug = "AT+DEBUG=";
-QString At ="AT+";
+QString At ="AT";
+
+
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
 
+    Extend::extendflag =false;
     ui->setupUi(this);
 
     //ui->groupBox_3->setStyleSheet("background:transparent;border:2px solid red;");
@@ -36,7 +42,9 @@ MainWindow::MainWindow(QWidget *parent)
 
         ui->comnum->addItem(info.portName());
     }
+
     QSerialPort serial;
+
 
 }
 
@@ -44,46 +52,79 @@ MainWindow::~MainWindow()
 {
     QString path = filepath +"/default.text";
     QFile::remove(path);
+    delete extend;
     delete ui;
 }
 //读取接收到的消息
+
+void MainWindow::Delay_MSec_Suspend(unsigned int msec)
+{
+    QTime _Timer = QTime::currentTime().addMSecs(msec);
+    while( QTime::currentTime() < _Timer );
+}
+QByteArray test = "\r\n";
 void MainWindow::ReadData()
 {
     QByteArray buf;
-
+   // Delay_MSec_Suspend(10);
     buf=serial->readAll();
 
     if(!buf.isEmpty())
     {
-        QString  path = filepath +"/default.text";
-        QFile defaultfile(path);
-        if(false == defaultfile.open(QIODevice::WriteOnly| QIODevice::Text |QIODevice::Append))
-        {
-            QMessageBox::about(NULL,"提示","文件打开失败!");
-        }
-        defaultfile.write(buf);
 
-        defaultfile.close();
-        QString str = buf;
-        int num =str.indexOf(Debug);
-        if(num != -1)
+        if(buf.contains(test))
         {
-            QString debug = str.mid(num);
-            ui->DebugText->append(debug);
-            debug = str.mid(Debug.length());
-            AnalysisConfig(debug);
+            QString str1 = buf;
+            //qDebug()<< str1;
+            int num1 =str1.indexOf("\r\n");
+            // qDebug()<< str1.mid(0,num1);
+            Extend::RevBuff.append(str1.mid(0,num1+2));
+            if(Extend::extendflag == true)
+                emit DisPlay(Extend::RevBuff);
+                //Extend::DisplagRevData(&RevBuff);
+
+     //       qDebug()<< Extend::RevBuff;
+  //          qDebug()<< "clear";
+            QString  path = filepath +"/default.text";
+            QFile defaultfile(path);
+            if(false == defaultfile.open(QIODevice::WriteOnly| QIODevice::Text |QIODevice::Append))
+            {
+                QMessageBox::about(NULL,"提示","文件打开失败!");
+            }
+            defaultfile.write(Extend::RevBuff);
+
+            defaultfile.close();
+
+            QString str = Extend::RevBuff;
+            int num =str.indexOf(Debug);
+            if(num != -1)
+            {
+                QString debug = str.mid(num);
+                ui->DebugText->append(debug);
+                debug = str.mid(Debug.length());
+                AnalysisConfig(debug);
+            }
+            else
+            {
+                int at =str.indexOf(At);
+                if(at != -1)
+                {
+                    QString debug = str.mid(at);
+                    ui->U9507E_AT_Text->append(debug);
+                }
+            }
+
+            Extend::RevBuff.clear();
+  //          qDebug() << buf.mid(num1,buf.size() - num1 -2);
+            Extend::RevBuff.append(buf.mid(num1+2));
+            //serial->clear();
         }
         else
         {
-            int at =str.indexOf(At);
-            if(at != -1)
-            {
-                QString debug = str.mid(at);
-                ui->U9507E_AT_Text->append(debug);
-            }
+           Extend::RevBuff.append(buf);// +=buf;
+ //          qDebug()<< buf.size();
         }
     }
-    serial->clear();
     buf.clear();
 }
 
@@ -121,7 +162,7 @@ void MainWindow::on_OpenButter_clicked()
         ui->DebugText->setEnabled(true);
         ui->savebutton->setEnabled(true);
         ui->Clear->setEnabled(true);
-
+        //ui->Extend->setEnabled(true);
         QObject::connect(serial,&QSerialPort::readyRead,this,&MainWindow::ReadData);
 
         ui->OpenButter->setText("关闭");
@@ -133,7 +174,9 @@ void MainWindow::on_OpenButter_clicked()
         serial->deleteLater();
         ui->savebutton->setEnabled(false);
         ui->Clear->setEnabled(false);
+        //ui->Extend->setEnabled(false);
         ui->OpenButter->setText("开启");
+        //delete extend;
     }
 }
 
@@ -596,4 +639,23 @@ void MainWindow::on_Clear_clicked()
     ui->U9507E_AT_Text->document()->clear();
     QString path = filepath +"/default.text";
     QFile::remove(path);
+    emit ClearRev(true);
+
+}
+
+void MainWindow::on_Extend_clicked()
+{
+    if(Extend::extendflag == false)
+    {
+        extend = new Extend(this);
+        Extend::extendflag = true;
+        connect(this,SIGNAL(ClearRev(bool)),extend,SLOT(ClearRevData(bool)));
+        connect(this,SIGNAL(DisPlay(QString)),extend,SLOT(DisplagRevData(QString)));
+        extend->show();
+    }
+    else
+    {
+        Extend::extendflag = false;
+        delete extend;
+    }
 }
